@@ -310,6 +310,7 @@
             document.getElementById('aiResult').style.display = 'block';
         }
 
+        // 修改後的 submitAnswer 函數：加入了完整的成功與失敗提醒！
         async function submitAnswer() {
             const studentClass = document.getElementById('studentClass').value;
             const studentId = document.getElementById('studentId').value;
@@ -321,14 +322,26 @@
                 alert("請完整填寫班級、學號、姓名與作答內容喔！"); return;
             }
             const payload = { studentClass: studentClass, studentId: studentId, studentName: studentName, rule: rule, answer: answer };
+            
             try {
-                const response = await fetch('/api/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const response = await fetch('/api/submit', { 
+                    method: 'POST', 
+                    headers: { 'Content-Type': 'application/json' }, 
+                    body: JSON.stringify(payload) 
+                });
                 const result = await response.json();
+                
                 if (result.status === "success") {
-                    alert("交卷成功！老師已經收到你的答案了。");
+                    alert("✅ 交卷成功！老師已經收到你的答案了。");
                     document.getElementById('studentAnswer').value = ""; 
+                } else {
+                    // 這裡如果失敗，會把你剛才沒看到的具體原因顯示出來
+                    alert("⚠️ 錯誤：" + result.message);
                 }
-            } catch (error) { alert("交卷失敗，請檢查系統狀態。"); }
+            } catch (error) { 
+                console.error("Fetch 錯誤:", error);
+                alert("交卷失敗，前端無法連線到伺服器，請按 F12 檢查 Console 錯誤。"); 
+            }
         }
     </script>
 </body>
