@@ -4,6 +4,7 @@ import datetime
 import os 
 import random
 import gspread # 新增的 Google 試算表套件
+import traceback
 
 app = Flask(__name__)
 
@@ -195,8 +196,9 @@ def submit_answer():
         return jsonify({"status": "success", "message": "答案已成功送出並儲存到 Google 試算表！"})
         
     except Exception as e:
-        print(f"❌ 雲端寫入錯誤: {e}")
-        return jsonify({"status": "error", "message": f"儲存失敗，系統發生錯誤。({e})"}), 500
+        print("❌ 雲端寫入發生嚴重錯誤，詳細原因如下：")
+        traceback.print_exc()  # 👈 💡 新增這行：逼 Python 吐出完整的錯誤追蹤！
+        return jsonify({"status": "error", "message": "儲存失敗，請查看系統 Logs"}), 500
 
 if __name__ == '__main__':
     app.run(debug=True)
