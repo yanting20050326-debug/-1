@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <title>Web-based 生管排程系統</title>
+    <script type="text/javascript" src="https://www.gstatic.com/charts/loader.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; line-height: 1.6; background-color: #f4f7f6; }
+        .container { display: flex; gap: 20px; }
+        .panel { border: 1px solid #ddd; padding: 20px; border-radius: 8px; width: 50%; background: #fff; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+        select, input[type="text"], input[type="number"], textarea { margin-bottom: 15px; padding: 10px; width: 100%; box-sizing: border-box; border: 1px solid #ccc; border-radius: 4px; }
+        button { background-color: #007bff; color: white; border: none; cursor: pointer; border-radius: 4px; font-size: 16px; padding: 12px; font-weight: bold; transition: 0.2s; }
+        button:hover { background-color: #0056b3; }
+        .result-box { background: #f8f9fa; padding: 15px; border-left: 4px solid #28a745; margin-bottom: 15px; border-radius: 4px; }
+        .ai-box { background: #eef2ff; padding: 15px; border-left: 4px solid #6610f2; display: none; border-radius: 4px; }
+        #gantt_chart { width: 100%; height: 400px; overflow-y: auto; margin-top: 10px; } 
+        .metrics-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
+        .metric-card { background: #fff; padding: 15px; border-radius: 5px; border: 1px solid #eee; text-align: center; box-shadow: 0 2px 4px rgba(0,0,0,0.02); }
+        .metric-card span { display: block; font-size: 24px; font-weight: bold; color: #333; margin-top: 5px; }
+        #manualInputArea { display: none; background: #fff3cd; padding: 15px; border-radius: 5px; margin-bottom: 15px; border-left: 4px solid #ffc107; }
+        .submit-section { background: #e9ecef; padding: 15px; border-radius: 5px; margin-top: 20px; }
+        .student-info-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px; margin-bottom: 10px;}
+        .student-info-grid label { display: block; font-weight: bold; margin-bottom: 5px; font-size: 14px;}
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; background: white; }
+        th, td { border: 1px solid #ddd; padding: 10px 8px; text-align: center; }
+        th { background-color: #f1f3f5; color: #333; }
+        .delayed-row { color: #dc3545; font-weight: bold; background-color: #fff8f8; }
+        .urgent-tag { background: #dc3545; color: white; padding: 2px 6px; border-radius: 10px; font-size: 12px; }
+        .machine-tag { background: #17a2b8; color: white; padding: 2px 6px; border-radius: 4px; font-size: 12px; }
+    </style>
+</head>
+<body>
+    <h2>課堂模擬：生產排程最佳化</h2>
+    <div class="container">
+        <div class="panel">
+            <h3 style="margin-top: 0; border-bottom: 2px solid #007bff; padding-bottom: 10px;">🛠️ 設定排程條件</h3>
+            
+            <label style="font-weight: bold;">訂單數量 (輸入 5 ~ 10)：</label>
+            <input type="number" id="orderCount" min="5" max="10" value="10" onchange="updateManualHint(); calculateSchedule(false);">
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 10px;">
+                <div>
+                    <label style="font-weight: bold;">機台數 (輸入 1 ~ 5)：</label>
+                    <input type="number" id="machineCount" min="1" max="5" value="4" onchange="calculateSchedule(false);">
+                </div>
+                <div>
+                    <label style="font-weight: bold;">平均加工時間 (30~60分)：</label>
+                    <input type="number" id="avgProcessingTime" min="30" max="60" value="45" onchange="calculateSchedule(false);">
+                </div>
+                <div>
+                    <label style="font-weight: bold;">交期緊急度：</label>
+                    <select id="urgency" onchange="calculateSchedule(false);">
+                        <option value="high" selected>高</option>
+                        <option value="medium">中</option>
+                        <option value="low">低</option>
+                    </select>
+                </div>
+            </div>
+
+            <label style="font-weight: bold;">選擇排程方式：</label>
+            <select id="scheduleRule" onchange="toggleManualInput(); calculateSchedule(false);">
+                <option value="FCFS">FCFS (先到先服務)</option>
+                <option value="SPT">SPT (最短處理時間優先)</option>
+                <option value="LPT">LPT (最長處理時間優先)</option>
+                <option value="EDD">EDD (最早到期日優先)</option>
+                <option value="CR">CR (臨界法則)</option>
+                <option value="MANUAL" style="font-weight: bold; color: blue;">✍️ 自訂排程 (挑戰自己手動排！)</option>
+            </select>
+
+            <div id="manualInputArea">
+                <label id="manualLabel" style="font-weight: bold; color: #856404;">請手動安排這 10 張訂單的順序：</label>
+                <p id="manualSubText" style="font-size: 13px; color: #666; margin-top: 2px;">(請輸入 1 到 10 的數字，並用逗號隔開)</p>
+                <input type="text" id="manualOrder" value="1, 2, 3, 4, 5, 6, 7, 8, 9, 10" onchange="calculateSchedule(false);">
+            </div>
+
+            <button onclick="calculateSchedule(true)" style="width: 100%; margin-bottom: 10px;">執行排程計算 🚀</button>
+            <button onclick="triggerAI()" style="width: 100%; background-color: #6f42c1;">🤖 AI 決策分析</button> 
+            
+            <div class="submit-section">
+                <h3 style="margin-top: 0;">📤 填寫心得與交卷</h3>
+                <div class="student-info-grid">
+                    <div><label>班級：</label><input type="text" id="studentClass" placeholder="如: 企管甲"></div>
+                    <div><label>學號：</label><input type="text" id="studentId" placeholder="如: 112001"></div>
+                    <div><label>姓名：</label><input type="text" id="studentName" placeholder="如: 王小明"></div>
+                </div>
+                <label style="font-weight: bold; display: block; margin-top: 5px; margin-bottom: 5px;">哪一種方案最符合公司策略？為什麼？</label>
+                <textarea id="studentAnswer" rows="4" placeholder="請比較不同策略的結果差異，並寫出你的分析..."></textarea>
+                <button onclick="submitAnswer()" style="width: 100%; background-color: #28a745;">提交答案給老師</button>
+            </div>
+        </div>
+
+        <div class="panel">
+            <h3 style="margin-top: 0; border-bottom: 2px solid #28a745; padding-bottom: 10px;">📊 系統即時監控面板</h3>
+            
+            <div style="max-height: 250px; overflow-y: auto; margin-bottom: 20px; border: 1px solid #ddd; border-radius: 4px;">
+                <table>
+                    <thead style="position: sticky; top: 0; z-index: 1;">
+                        <tr>
+                            <th>加工順序</th>
+                            <th>分配機台</th>
+                            <th>訂單號</th>
+                            <th>需製造數量</th>
+                            <th>加工時間</th>
+                            <th>交期</th>
+                            <th>完工時間</th>
+                            <th>狀態</th>
+                        </tr>
+                    </thead>
+                    <tbody id="orderTableBody">
+                        <tr><td colspan="8">等待資料載入中...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="metrics-grid">
+                <div class="metric-card">
+                    ⏱ 平均流程時間
+                    <span id="flowTime" style="color: #007bff;">-</span>
+                </div>
+                <div class="metric-card">
+                    ⚠️ 延誤工作件數
+                    <span id="tardyJobs" style="color: #dc3545;">-</span>
+                </div>
+                <div class="metric-card">
+                    📈 系統內平均工作件數
+                    <span id="avgJobs" style="color: #17a2b8;">-</span>
+                </div>
+                <div class="metric-card">
+                    🏁 總完工時間 (Makespan)
+                    <span id="makespan" style="color: #28a745;">-</span>
+                </div>
+            </div>
+            
+            <div id="aiResult" class="ai-box" style="margin-top: 15px;">
+                <h4 style="margin-top: 0;">✨ AI 決策分析結果</h4>
+                <p><strong>💡 系統建議：</strong> <span id="aiSuggestion">-</span></p>
+                <p><strong>❓ 思考引導：</strong> 若急單必須無條件最先做，指標會變糟嗎？該如何手動排程？</p>
+            </div>
+
+            <h4 style="margin-top: 25px;">📊 多機台排程甘特圖 (依機台分色)</h4>
+            <div id="gantt_chart" style="height: 380px; display: flex; align-items: center; justify-content: center; color: #666;">載入中...</div>
+        </div>
+    </div>
+
+    <script>
+        google.charts.load('current', {'packages':['gantt']});
+        google.charts.setOnLoadCallback(() => calculateSchedule(false)); 
+
+        let currentAiSuggestion = "";
+
+        function updateManualHint() {
+            let countStr = document.getElementById('orderCount').value;
+            let displayCount = parseInt(countStr);
+            if(isNaN(displayCount)) displayCount = 10;
+            // 提示區只做顯示處理，不偷偷去改使用者的 input
+            let safeCount = Math.max(5, Math.min(10, displayCount));
+            
+            document.getElementById('manualLabel').innerText = `請手動安排這 ${safeCount} 張訂單的順序：`;
+            document.getElementById('manualSubText').innerText = `(請輸入 1 到 ${safeCount} 的數字，並用逗號隔開)`;
+            
+            let exampleArr = [];
+            for(let i=1; i<=safeCount; i++){ exampleArr.push(i); }
+            document.getElementById('manualOrder').value = exampleArr.join(', ');
+        }
+
+        function toggleManualInput() {
+            const rule = document.getElementById('scheduleRule').value;
+            const manualArea = document.getElementById('manualInputArea');
+            if (rule === 'MANUAL') {
+                manualArea.style.display = 'block';
+            } else {
+                manualArea.style.display = 'none';
+            }
+        }
+
+        async function calculateSchedule(isCalculate = false) {
+            // --- 💡 核心防呆修改區：按下按鈕時，嚴格攔截不合理的數字 ---
+            if (isCalculate) {
+                let chkOrder = parseInt(document.getElementById('orderCount').value);
+                let chkMachine = parseInt(document.getElementById('machineCount').value);
+                let chkTime = parseInt(document.getElementById('avgProcessingTime').value);
+
+                if (isNaN(chkOrder) || chkOrder < 5 || chkOrder > 10) {
+                    alert("⚠️ 執行失敗：訂單數量必須在 5 到 10 筆之間！");
+                    return; // 直接終止，不向伺服器發送請求
+                }
+                if (isNaN(chkMachine) || chkMachine < 1 || chkMachine > 5) {
+                    alert("⚠️ 執行失敗：機台數必須在 1 到 5 台之間！");
+                    return;
+                }
+                if (isNaN(chkTime) || chkTime < 30 || chkTime > 60) {
+                    alert("⚠️ 執行失敗：平均加工時間必須在 30 到 60 分鐘之間！");
+                    return;
+                }
+            }
+            // -------------------------------------------------------------
+
+            const payload = {
+                orderCount: document.getElementById('orderCount').value,
+                machineCount: document.getElementById('machineCount').value,
+                avgProcessingTime: document.getElementById('avgProcessingTime').value,
+                urgency: document.getElementById('urgency').value,
+                rule: document.getElementById('scheduleRule').value,
+                manualOrder: document.getElementById('manualOrder').value,
+                isCalculate: isCalculate 
+            };
+
+            try {
+                const response = await fetch('/api/schedule', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                const data = await response.json();
+
+                if (!response.ok) {
+                    alert(data.error || "發生錯誤，請檢查輸入數值！");
+                    return;
+                }
+
+                document.getElementById('flowTime').innerText = data.mean_flow_time === "-" ? "-" : data.mean_flow_time + " 分";
+                document.getElementById('makespan').innerText = data.makespan === "-" ? "-" : data.makespan + " 分";
+                document.getElementById('tardyJobs').innerText = data.tardy_jobs_count === "-" ? "-" : data.tardy_jobs_count + " 件";
+                document.getElementById('avgJobs').innerText = data.average_jobs === "-" ? "-" : data.average_jobs + " 件";
+                
+                currentAiSuggestion = data.ai_suggestion;
+                document.getElementById('aiResult').style.display = 'none'; 
+                
+                updateOrderTable(data.job_order);
+
+                if (isCalculate) {
+                    drawGanttChart(data.job_order);
+                } else {
+                    document.getElementById('gantt_chart').innerHTML = '請先點擊「執行排程計算」以顯示甘特圖';
+                }
+
+            } catch (error) {
+                console.error("API 錯誤:", error);
+            }
+        }
+
+        function drawGanttChart(jobData) {
+            document.getElementById('gantt_chart').innerHTML = ''; 
+            var data = new google.visualization.DataTable();
+            data.addColumn('string', 'Task ID');
+            data.addColumn('string', '訂單名稱');
+            data.addColumn('string', '機台分配'); 
+            data.addColumn('date', 'Start Date');
+            data.addColumn('date', 'End Date');
+            data.addColumn('number', 'Duration');
+            data.addColumn('number', 'Percent Complete');
+            data.addColumn('string', 'Dependencies');
+
+            var rows = [];
+            let baseYear = 2024, baseMonth = 0, baseDay = 1, baseHour = 8;
+
+            jobData.forEach(job => {
+                let start = new Date(baseYear, baseMonth, baseDay, baseHour, job.start, 0);
+                let endVal = typeof job.end === 'string' ? parseInt(job.end.replace(' 分', '')) : job.end;
+                let end = new Date(baseYear, baseMonth, baseDay, baseHour, endVal, 0);
+                
+                rows.push([
+                    job.id, 
+                    `${job.id} (遲延:${job.lateness}分)`, 
+                    job.machine_id, 
+                    start, 
+                    end, 
+                    null, 
+                    100, 
+                    null
+                ]);
+            });
+
+            data.addRows(rows);
+            const chartHeight = Math.max(250, jobData.length * 40 + 50);
+            var options = { height: chartHeight };
+            var chart = new google.visualization.Gantt(document.getElementById('gantt_chart'));
+            chart.draw(data, options);
+        }
+
+        function updateOrderTable(jobData) {
+            const tbody = document.getElementById('orderTableBody');
+            tbody.innerHTML = ""; 
+            
+            jobData.forEach((job, index) => {
+                const tr = document.createElement('tr');
+                if (job.tardiness > 0 && job.tardiness !== "-") { tr.className = "delayed-row"; }
+                
+                let urgentHtml = job.urgent === "是" ? `<span class="urgent-tag">急單</span>` : "";
+                let machineHtml = job.machine_id !== "-" ? `<span class="machine-tag">${job.machine_id}</span>` : "-";
+                let statusHtml = job.status !== "-" ? `${job.status} (遲延: ${job.lateness})` : "-";
+                
+                tr.innerHTML = `
+                    <td># ${index + 1}</td>
+                    <td>${machineHtml}</td>
+                    <td>訂單 ${job.original_id} ${urgentHtml}</td>
+                    <td>${job.quantity}</td> 
+                    <td>${job.processing_time}</td>
+                    <td>${job.due_date}</td>
+                    <td>${job.end}</td>
+                    <td>${statusHtml}</td>
+                `;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function triggerAI() {
+            if (!currentAiSuggestion) return;
+            document.getElementById('aiSuggestion').innerText = currentAiSuggestion;
+            document.getElementById('aiResult').style.display = 'block';
+        }
+
+        async function submitAnswer() {
+            const studentClass = document.getElementById('studentClass').value;
+            const studentId = document.getElementById('studentId').value;
+            const studentName = document.getElementById('studentName').value;
+            const answer = document.getElementById('studentAnswer').value;
+            const rule = document.getElementById('scheduleRule').value;
+
+            if (!studentClass || !studentId || !studentName || !answer) {
+                alert("請完整填寫班級、學號、姓名與作答內容喔！"); return;
+            }
+            const payload = { studentClass: studentClass, studentId: studentId, studentName: studentName, rule: rule, answer: answer };
+            try {
+                const response = await fetch('/api/submit', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) });
+                const result = await response.json();
+                if (result.status === "success") {
+                    alert("交卷成功！老師已經收到你的答案了。");
+                    document.getElementById('studentAnswer').value = ""; 
+                }
+            } catch (error) { alert("交卷失敗，請檢查系統狀態。"); }
+        }
+    </script>
+</body>
+</html>
